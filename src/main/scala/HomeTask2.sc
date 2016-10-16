@@ -23,47 +23,95 @@ trait IntTraversable {
 }
 
 class IntArrayBuffer extends IntTraversable {
+  private var data = new Array[Int](0)
+  private var mySize = 0
 
-  def apply(index: Int): Int = ???
+  def this(array: Array[Int]) = {
+    this()
+    data = array
+    mySize = array.length
+  }
 
-  def update(index: Int, element: Int): Unit = ???
+  def apply(index: Int): Int = data(index)
 
-  def clear(): Unit = ???
+  def update(index: Int, element: Int): Unit = data.update(index, element)
 
-  def +=(element: Int): IntArrayBuffer = ???
+  def clear(): Unit = mySize = 0
 
-  def ++=(elements: IntTraversable): IntArrayBuffer = ???
+  def +=(element: Int): IntArrayBuffer = {
+    ensureSize(size + 1)
+    data.update(size, element)
+    mySize += 1
+    this
+  }
 
-  def remove(index: Int): Int = ???
+  def ++=(elements: IntTraversable): IntArrayBuffer = {
+    ensureSize(size + elements.size)
+    elements.foreach(+=(_))
+    this
+  }
 
-  override def isEmpty: Boolean = ???
+  def remove(index: Int): Int = {
+    val removed = data(index)
+    Array.copy(data, index + 1, data, index, size - index - 1)
+    mySize -= 1
+    removed
+  }
 
-  override def size: Int = ???
+  override def isEmpty: Boolean = size == 0
 
-  override def contains(element: Int): Boolean = ???
+  override def size: Int = mySize
 
-  override def head: Int = ???
+  override def contains(element: Int): Boolean = data.take(size).contains(element)
 
-  override def tail: IntArrayBuffer = ???
+  override def head: Int = data(0)
 
-  override def ++(traversable: IntTraversable): IntArrayBuffer = ???
+  override def tail: IntArrayBuffer = new IntArrayBuffer(data.slice(1, size))
 
-  protected def ensureSize(size: Int): Unit = ???
+  override def ++(traversable: IntTraversable): IntArrayBuffer = {
+    new IntArrayBuffer(data.take(size)) ++= traversable
+  }
 
-  override def filter(predicate: (Int) => Boolean): IntTraversable = ???
+  protected def ensureSize(size: Int): Unit = {
+    var arraySize = math.max(1, data.length)
+    while (arraySize < size) {
+      arraySize *= 2
+    }
+    val newArray = new Array[Int](arraySize)
+    Array.copy(data, 0, newArray, 0, mySize)
+    data = newArray
+  }
 
-  override def map(function: (Int) => Int): IntTraversable = ???
+  override def filter(predicate: (Int) => Boolean): IntArrayBuffer = {
+    data = data.take(size).filter(predicate)
+    mySize = data.length
+    this
+  }
 
-  override def flatMap(function: (Int) => IntTraversable): IntTraversable = ???
+  override def map(function: (Int) => Int): IntArrayBuffer = {
+    data = data.take(size).map(function)
+    mySize = data.length
+    this
+  }
 
-  override def foreach(function: (Int) => Unit): Unit = ???
+  override def flatMap(function: (Int) => IntTraversable): IntArrayBuffer = {
+    val flat = new IntArrayBuffer()
+    foreach(flat ++= function(_))
+    flat
+  }
+
+  override def foreach(function: (Int) => Unit): Unit = data.take(size).foreach(function)
 }
 
 object IntArrayBuffer {
-  def empty: IntArrayBuffer = ???
+  def empty: IntArrayBuffer = new IntArrayBuffer()
 
-  def apply(elements: Int*): IntArrayBuffer = ???
+  def apply(elements: Int*): IntArrayBuffer = new IntArrayBuffer(elements.toArray)
 
-  def unapplySeq(buffer: IntArrayBuffer): Option[IntArrayBuffer] = ???
+  def unapplySeq(buffer: IntArrayBuffer): Option[IntArrayBuffer] =
+    if (buffer == null || buffer.isEmpty) {
+      None
+    } else {
+      Some(buffer)
+    }
 }
-
