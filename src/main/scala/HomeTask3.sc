@@ -7,39 +7,47 @@
 Сделать архитектурно легко расширяемым на другие валюты.
 */
 
-object Currency extends Enumeration {
-  type Currency = Value
-  val usd, eur, rub = Value
+import java.time.LocalDate
+
+import scala.xml.XML
+
+def loadExchangeRate(fromCurrency: String, date: LocalDate): Double = {
+  val request = s"http://www.cbr.ru/scripts/XML_daily.asp?date_req=${date.getDayOfMonth}/${date.getMonthValue}/${date.getYear}"
+  XML.load(request)
+    .child
+    .toList
+    .filter(_.child.exists(_.text == fromCurrency))
+    .head
+    .child
+    .filter(_.label == "Value")
+    .head.text.replace(',', '.').toDouble
 }
 
-import java.time.LocalDate
+def getExchangeRate(from: String, to: String, date: LocalDate): Double = {
+  if (from == to) return 1
+  if (to.equals("RUB")) {
+    return loadExchangeRate(from, date)
+  }
+  if (from.equals("RUB")) {
+    return 1d / loadExchangeRate(to, date)
+  }
+  loadExchangeRate(from, date) / loadExchangeRate(to, date)
+}
+
+object Currency extends Enumeration {
+  type Currency = Value
+  val usd = Value("USD")
+  val rub = Value("RUB")
+  val eur = Value("EUR")
+}
 
 import Currency._
 
-type ExchangeRate = Function[LocalDate, Double]
-type Conversion = Map[(Currency, Currency), ExchangeRate]
-
-def usbToRub(date: LocalDate): Double = if (date.getYear < 2015) 30 else 65
-def eurToRub(date: LocalDate): Double = if (date.getYear < 2015) 40 else 71
-
-val conversion: Conversion = Map(
-  (usd, rub) -> usbToRub,
-  (eur, rub) -> eurToRub
-)
-
-case class Converter(conversion: Conversion) extends {
-  def convert(from: Currency, to: Currency, date: LocalDate): Double = {
-    if (from == to) return 1
-    if (conversion.contains((from, to))) {
-      conversion((from, to)).apply(date)
-    } else {
-      1d / conversion((to, from)).apply(date)
-    }
-  }
+implicit class MoneyFactory(value: Double) {
+  val usd = new Money(value, Currency.usd)
+  val eur = new Money(value, Currency.eur)
+  val rub = new Money(value, Currency.rub)
 }
-implicit val converter = Converter(conversion)
-
-val now = LocalDate.now
 
 class Money(amount: Double, currency: Currency) {
   var initialValue: Money = _
@@ -49,18 +57,13 @@ class Money(amount: Double, currency: Currency) {
   }
 
   def to(toCurrency: Currency, date: LocalDate = LocalDate.now): Money = {
-    val converted = new Money(amount * converter.convert(currency, toCurrency, date), toCurrency)
+    val exchangeRate: Double = getExchangeRate(currency.toString, toCurrency.toString, date)
+    val converted = new Money(amount * exchangeRate, toCurrency)
     converted.initialValue = this
     converted
   }
 
   override def toString: String = amount + " " + currency
-}
-
-implicit class DoubleMoney(value: Double) {
-  val usd = new Money(value, Currency.usd)
-  val rub = new Money(value, Currency.rub)
-  val eur = new Money(value, Currency.eur)
 }
 
 case class Month(day: Int, month: Int) {
@@ -71,7 +74,9 @@ implicit class Day(day: Int) {
   def --(month: Int): Month = Month(day, month)
 }
 
-val rubles = 100.usd to rub
-val euro = 100.rub to eur on 12--11--2013
+val rubles: Money = 100.usd to rub
+val euro1: Money = 100.usd to eur
+val euro2: Money = 1000.rub to eur
+val euro3: Money = 1000.rub to eur on 11--11--2011
 
 
